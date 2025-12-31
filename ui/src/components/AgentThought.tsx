@@ -131,9 +131,12 @@ export function AgentThought({ logs, agentStatus }: AgentThoughtProps) {
           )}
         </div>
 
-        {/* Thought text with fade transition */}
+        {/* Thought text with fade transition + shimmer effect when running */}
         <p
-          className="font-mono text-sm text-[var(--color-neo-text)] truncate transition-all duration-150 ease-out"
+          className={`
+            font-mono text-sm truncate transition-all duration-150 ease-out
+            ${isRunning ? 'animate-shimmer' : 'text-[var(--color-neo-text)]'}
+          `}
           style={{
             opacity: textVisible ? 1 : 0,
             transform: textVisible ? 'translateY(0)' : 'translateY(-4px)',

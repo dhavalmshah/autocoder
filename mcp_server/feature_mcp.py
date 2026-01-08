@@ -503,14 +503,14 @@ def context_read(
         # Validate name to prevent path traversal
         validation_error = _validate_context_name(name)
         if validation_error:
-            return json.dumps({"error": validation_error})
+            return json.dumps({"success": False, "error": validation_error})
 
         content = load_context_file(PROJECT_DIR, name)
         if content is None:
-            return json.dumps({"error": f"Context file '{name}' not found"})
-        return content
+            return json.dumps({"success": False, "error": f"Context file '{name}' not found"})
+        return json.dumps({"success": True, "content": content}, indent=2)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"success": False, "error": str(e)})
 
 
 @mcp.tool()
@@ -532,10 +532,10 @@ def context_read_all(
     try:
         content = load_all_context(PROJECT_DIR, max_chars)
         if not content:
-            return json.dumps({"message": "No context documentation found. Run analyzer first."})
-        return content
+            return json.dumps({"success": False, "message": "No context documentation found. Run analyzer first."})
+        return json.dumps({"success": True, "content": content}, indent=2)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"success": False, "error": str(e)})
 
 
 @mcp.tool()
@@ -651,7 +651,9 @@ def context_update_index(
             # Look for table rows like "| Architecture | Pending | architecture.md |"
             # Capture the area and filename columns, only replace the status
             # Use case-sensitive matching for precise table row targeting
-            pattern = rf"(\|\s*{re.escape(area)}\s*\|)\s*\w+\s*(\|[^|\n]*\|)"
+            # Match only valid status values explicitly to avoid false matches
+            status_pattern = r"(?:Pending|Complete|In Progress)"
+            pattern = rf"(\|\s*{re.escape(area)}\s*\|)\s*{status_pattern}\s*(\|[^|\n]*\|)"
             replacement = rf"\g<1> {status} \2"
             new_content, count = re.subn(pattern, replacement, content)
             if count > 0:

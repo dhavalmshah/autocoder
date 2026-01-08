@@ -9,12 +9,12 @@ and users can accept/reject suggestions to create features in the database.
 
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from ..validators import is_valid_project_name
 from ..services.chat_to_features_session import (
     ChatToFeaturesSession,
     create_session,
@@ -40,11 +40,6 @@ def _get_project_path(project_name: str) -> Optional[Path]:
 
     from registry import get_project_path
     return get_project_path(project_name)
-
-
-def validate_project_name(name: str) -> bool:
-    """Validate project name to prevent path traversal."""
-    return bool(re.match(r'^[a-zA-Z0-9_-]{1,50}$', name))
 
 
 def _get_db_classes():
@@ -136,7 +131,7 @@ async def chat_to_features_websocket(websocket: WebSocket, project_name: str):
     - {"type": "error", "content": "..."} - Error message
     - {"type": "pong"} - Keep-alive pong
     """
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         await websocket.close(code=4000, reason="Invalid project name")
         return
 
@@ -324,7 +319,7 @@ async def list_chat_sessions(project_name: str):
 @router.delete("/{project_name}/chat/sessions")
 async def close_chat_session(project_name: str):
     """Close an active chat-to-features session."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         return {"success": False, "message": "Invalid project name"}
 
     session = get_session(project_name)

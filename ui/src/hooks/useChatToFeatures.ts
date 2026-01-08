@@ -57,6 +57,11 @@ interface ChatToFeaturesPongMessage {
   type: 'pong'
 }
 
+interface ChatToFeaturesFeatureRejectedMessage {
+  type: 'feature_rejected'
+  feature_index: number
+}
+
 type ChatToFeaturesServerMessage =
   | ChatToFeaturesTextMessage
   | ChatToFeaturesFeatureSuggestionMessage
@@ -64,6 +69,7 @@ type ChatToFeaturesServerMessage =
   | ChatToFeaturesResponseDoneMessage
   | ChatToFeaturesErrorMessage
   | ChatToFeaturesPongMessage
+  | ChatToFeaturesFeatureRejectedMessage
 
 // ============================================================================
 // Hook Options and Return Types
@@ -315,6 +321,12 @@ export function useChatToFeatures({
 
           case 'pong': {
             // Keep-alive response, nothing to do
+            break
+          }
+
+          case 'feature_rejected': {
+            // Server acknowledgment of rejection - no action needed
+            // Client already removed the suggestion locally in rejectFeature()
             break
           }
         }

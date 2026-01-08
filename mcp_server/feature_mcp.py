@@ -624,7 +624,17 @@ def context_update_index(
     Returns:
         JSON with: success (bool), updated_areas (list), message (str)
     """
+    # Valid status values for consistency
+    valid_statuses = {"Pending", "Complete", "In Progress"}
+
     try:
+        # Validate status values before processing
+        for area, status in status_updates.items():
+            if status not in valid_statuses:
+                return json.dumps({
+                    "error": f"Invalid status '{status}' for area '{area}'. Must be one of: {', '.join(sorted(valid_statuses))}"
+                })
+
         context_dir = ensure_context_dir(PROJECT_DIR)
         index_path = context_dir / "_index.md"
 
@@ -640,9 +650,10 @@ def context_update_index(
         for area, status in status_updates.items():
             # Look for table rows like "| Architecture | Pending | architecture.md |"
             # Capture the area and filename columns, only replace the status
+            # Use case-sensitive matching for precise table row targeting
             pattern = rf"(\|\s*{re.escape(area)}\s*\|)\s*\w+\s*(\|[^|\n]*\|)"
             replacement = rf"\g<1> {status} \2"
-            new_content, count = re.subn(pattern, replacement, content, flags=re.IGNORECASE)
+            new_content, count = re.subn(pattern, replacement, content)
             if count > 0:
                 content = new_content
                 updated_areas.append(area)

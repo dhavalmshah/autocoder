@@ -62,6 +62,27 @@ interface ChatToFeaturesFeatureRejectedMessage {
   feature_index: number
 }
 
+interface ChatToFeaturesHistoryMessage {
+  type: 'history'
+  data: {
+    conversation_id: number | null
+    messages: Array<{
+      id: string
+      role: 'user' | 'assistant' | 'system'
+      content: string
+      timestamp: string
+    }>
+    pending_suggestions: Array<{
+      index: number
+      name: string
+      category: string
+      description: string
+      steps: string[]
+      reasoning: string
+    }>
+  }
+}
+
 type ChatToFeaturesServerMessage =
   | ChatToFeaturesTextMessage
   | ChatToFeaturesFeatureSuggestionMessage
@@ -70,6 +91,7 @@ type ChatToFeaturesServerMessage =
   | ChatToFeaturesErrorMessage
   | ChatToFeaturesPongMessage
   | ChatToFeaturesFeatureRejectedMessage
+  | ChatToFeaturesHistoryMessage
 
 // ============================================================================
 // Hook Options and Return Types
@@ -327,6 +349,30 @@ export function useChatToFeatures({
           case 'feature_rejected': {
             // Server acknowledgment of rejection - no action needed
             // Client already removed the suggestion locally in rejectFeature()
+            break
+          }
+
+          case 'history': {
+            // Restore conversation history from server on reconnect
+            const historyData = data.data
+            if (historyData && historyData.messages.length > 0) {
+              // Restore messages
+              setMessages(
+                historyData.messages.map((m: { id: string; role: 'user' | 'assistant' | 'system'; content: string; timestamp: string }) => ({
+                  id: m.id,
+                  role: m.role,
+                  content: m.content,
+                  timestamp: new Date(m.timestamp),
+                }))
+              )
+
+              // Restore pending suggestions
+              if (historyData.pending_suggestions) {
+                setPendingSuggestions(historyData.pending_suggestions)
+              }
+
+              console.log(`Restored ${historyData.messages.length} messages from server`)
+            }
             break
           }
         }

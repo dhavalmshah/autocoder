@@ -229,8 +229,8 @@ async def chat_to_features_websocket(websocket: WebSocket, project_name: str):
                         # Create the feature in the database
                         result = await _create_feature_in_db(project_dir, feature_data)
 
-                        # Remove the suggestion from the session
-                        session.remove_feature_suggestion(feature_index)
+                        # Remove the suggestion from the session (mark as accepted)
+                        session.remove_feature_suggestion(feature_index, status="accepted")
 
                         # Send success response
                         await websocket.send_json({

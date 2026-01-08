@@ -21,6 +21,14 @@ from typing import AsyncGenerator, Optional
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
 from api.database import Feature, create_database
+from .chat_to_features_database import (
+    add_message,
+    add_suggestion,
+    get_or_create_conversation,
+    load_conversation_history,
+    update_suggestion_status,
+    clear_conversation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +105,8 @@ class ChatToFeaturesSession:
         self._client_entered: bool = False
         self._context: Optional[str] = None
         self._feature_suggestions: dict[int, dict] = {}  # index -> feature data
+        self._conversation_id: Optional[int] = None
+        self._next_suggestion_index: int = 0
 
     async def close(self) -> None:
         """Clean up resources and close the Claude client."""
@@ -359,6 +369,15 @@ Now, let's help the user define their features!"""
 
         return features
 
+    def get_conversation_history(self) -> dict:
+        """
+        Get conversation history from database for sending to client on reconnect.
+
+        Returns:
+            Dict with messages and pending_suggestions
+        """
+        return load_conversation_history(self.project_dir, self.project_name)
+
     async def start(self) -> AsyncGenerator[dict, None]:
         """
         Initialize session with the Claude client.
@@ -366,6 +385,31 @@ Now, let's help the user define their features!"""
         Loads project context and sends initial greeting.
         Yields message chunks as they stream in.
         """
+        # Initialize database conversation
+        try:
+            conversation = get_or_create_conversation(self.project_dir, self.project_name)
+            self._conversation_id = conversation.id
+            logger.info(f"Using conversation ID: {self._conversation_id}")
+
+            # Load existing history
+            history = load_conversation_history(self.project_dir, self.project_name)
+            if history["messages"]:
+                # Restore in-memory state from database
+                self.messages = [
+                    {"role": m["role"], "content": m["content"], "timestamp": m["timestamp"]}
+                    for m in history["messages"]
+                ]
+                # Restore pending suggestions
+                for s in history["pending_suggestions"]:
+                    self._feature_suggestions[s["index"]] = s
+                    self._next_suggestion_index = max(self._next_suggestion_index, s["index"] + 1)
+
+                # Send history to client
+                yield {"type": "history", "data": history}
+                logger.info(f"Restored {len(history['messages'])} messages from database")
+        except Exception as e:
+            logger.warning(f"Could not initialize database conversation: {e}")
+
         # Load context once at start
         logger.info(f"Loading context for project: {self.project_name}")
         self._context = await self._load_context()
@@ -413,22 +457,30 @@ Now, let's help the user define their features!"""
             yield {"type": "error", "content": f"Failed to initialize chat: {str(e)}"}
             return
 
-        # Send initial greeting
-        try:
-            greeting = f"Hello! I'm here to help you add features to **{self.project_name}**. I've reviewed your project context and existing features. What would you like to build next?"
+        # Send initial greeting only for new conversations
+        if not self.messages:
+            try:
+                greeting = f"Hello! I'm here to help you add features to **{self.project_name}**. I've reviewed your project context and existing features. What would you like to build next?"
 
-            # Store the greeting
-            self.messages.append({
-                "role": "assistant",
-                "content": greeting,
-                "timestamp": datetime.now().isoformat()
-            })
+                # Store the greeting in memory
+                self.messages.append({
+                    "role": "assistant",
+                    "content": greeting,
+                    "timestamp": datetime.now().isoformat()
+                })
 
-            yield {"type": "text", "content": greeting}
-            yield {"type": "response_done"}
-        except Exception as e:
-            logger.exception("Failed to send greeting")
-            yield {"type": "error", "content": f"Failed to start conversation: {str(e)}"}
+                # Save to database
+                if self._conversation_id:
+                    try:
+                        add_message(self.project_dir, self._conversation_id, "assistant", greeting)
+                    except Exception as db_err:
+                        logger.warning(f"Failed to save greeting to database: {db_err}")
+
+                yield {"type": "text", "content": greeting}
+                yield {"type": "response_done"}
+            except Exception as e:
+                logger.exception("Failed to send greeting")
+                yield {"type": "error", "content": f"Failed to start conversation: {str(e)}"}
 
     async def send_message(self, user_message: str) -> AsyncGenerator[dict, None]:
         """
@@ -451,12 +503,19 @@ Now, let's help the user define their features!"""
             yield {"type": "error", "content": "Session not initialized. Call start() first."}
             return
 
-        # Store user message
+        # Store user message in memory
         self.messages.append({
             "role": "user",
             "content": user_message,
             "timestamp": datetime.now().isoformat()
         })
+
+        # Save user message to database
+        if self._conversation_id:
+            try:
+                add_message(self.project_dir, self._conversation_id, "user", user_message)
+            except Exception as db_err:
+                logger.warning(f"Failed to save user message to database: {db_err}")
 
         try:
             async for chunk in self._query_claude(user_message):
@@ -501,11 +560,29 @@ Now, let's help the user define their features!"""
                             # Yield any new features we haven't sent yet
                             while feature_index < len(features):
                                 feature = features[feature_index]
+                                actual_index = self._next_suggestion_index + feature_index
                                 # Store the suggestion for later retrieval
-                                self._feature_suggestions[feature_index] = feature
+                                self._feature_suggestions[actual_index] = feature
+
+                                # Save suggestion to database
+                                if self._conversation_id:
+                                    try:
+                                        add_suggestion(
+                                            self.project_dir,
+                                            self._conversation_id,
+                                            actual_index,
+                                            feature["name"],
+                                            feature["category"],
+                                            feature["description"],
+                                            feature["steps"],
+                                            feature.get("reasoning")
+                                        )
+                                    except Exception as db_err:
+                                        logger.warning(f"Failed to save suggestion to database: {db_err}")
+
                                 yield {
                                     "type": "feature_suggestion",
-                                    "index": feature_index,
+                                    "index": actual_index,
                                     "feature": feature
                                 }
                                 feature_index += 1
@@ -524,6 +601,16 @@ Now, let's help the user define their features!"""
                 "timestamp": datetime.now().isoformat()
             })
 
+            # Save assistant response to database
+            if self._conversation_id:
+                try:
+                    add_message(self.project_dir, self._conversation_id, "assistant", full_response)
+                except Exception as db_err:
+                    logger.warning(f"Failed to save assistant response to database: {db_err}")
+
+            # Update next suggestion index for next call
+            self._next_suggestion_index += feature_index
+
     def get_messages(self) -> list[dict]:
         """Get all messages in the conversation."""
         return self.messages.copy()
@@ -540,20 +627,53 @@ Now, let's help the user define their features!"""
         """
         return self._feature_suggestions.get(index)
 
-    def remove_feature_suggestion(self, index: int) -> bool:
+    def remove_feature_suggestion(self, index: int, status: str = "rejected") -> bool:
         """
         Remove a feature suggestion by its index.
 
         Args:
             index: The feature suggestion index to remove
+            status: Status to set in database ("accepted" or "rejected")
 
         Returns:
             True if removed, False if not found
         """
         if index in self._feature_suggestions:
             del self._feature_suggestions[index]
+
+            # Update status in database
+            if self._conversation_id:
+                try:
+                    update_suggestion_status(
+                        self.project_dir,
+                        self._conversation_id,
+                        index,
+                        status
+                    )
+                except Exception as db_err:
+                    logger.warning(f"Failed to update suggestion status in database: {db_err}")
+
             return True
         return False
+
+    def clear_history(self) -> bool:
+        """
+        Clear all messages and suggestions from this conversation.
+
+        Returns:
+            True if cleared successfully
+        """
+        # Clear in-memory state
+        self.messages.clear()
+        self._feature_suggestions.clear()
+        self._next_suggestion_index = 0
+
+        # Clear from database
+        try:
+            return clear_conversation(self.project_dir, self.project_name)
+        except Exception as e:
+            logger.warning(f"Failed to clear conversation from database: {e}")
+            return False
 
 
 # Session registry with thread safety

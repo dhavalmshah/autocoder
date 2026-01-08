@@ -156,6 +156,7 @@ def database_has_features(project_dir: Path) -> bool:
     if not db_path.exists():
         return False
 
+    engine = None
     try:
         engine, SessionLocal = create_database(project_dir)
         session = SessionLocal()
@@ -164,5 +165,9 @@ def database_has_features(project_dir: Path) -> bool:
             return count > 0
         finally:
             session.close()
-    except Exception:
+    except Exception as e:
+        print(f"Warning: Error checking features for {project_dir}: {e}")
         return False
+    finally:
+        if engine:
+            engine.dispose()

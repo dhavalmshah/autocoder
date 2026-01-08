@@ -341,6 +341,45 @@ def import_existing_project_flow() -> tuple[str, Path] | None:
         print(f"\nError: Path is not a directory: {project_path}")
         return None
 
+    # Security: Check if path is in a blocked/sensitive location
+    blocked_paths = [
+        Path.home() / ".ssh",
+        Path.home() / ".aws",
+        Path.home() / ".gnupg",
+        Path.home() / ".config",
+    ]
+    if sys.platform == "win32":
+        blocked_paths.extend([
+            Path("C:/Windows"),
+            Path("C:/Program Files"),
+            Path("C:/Program Files (x86)"),
+        ])
+    elif sys.platform == "darwin":
+        blocked_paths.extend([
+            Path("/System"),
+            Path("/Library"),
+            Path("/usr"),
+            Path("/bin"),
+            Path("/sbin"),
+        ])
+    else:  # Linux/Unix
+        blocked_paths.extend([
+            Path("/etc"),
+            Path("/var"),
+            Path("/usr"),
+            Path("/root"),
+            Path("/bin"),
+            Path("/sbin"),
+        ])
+
+    for blocked in blocked_paths:
+        try:
+            if blocked.exists() and project_path.resolve().is_relative_to(blocked.resolve()):
+                print(f"\nError: Cannot import project from system or sensitive directory: {blocked}")
+                return None
+        except (ValueError, OSError):
+            continue
+
     # Check for source code files
     source_extensions = {'.py', '.js', '.ts', '.tsx', '.jsx', '.java', '.go', '.rs', '.rb', '.php', '.vue', '.svelte', '.c', '.cpp', '.h', '.cs'}
     has_source_files = False

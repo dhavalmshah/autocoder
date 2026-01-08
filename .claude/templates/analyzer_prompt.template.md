@@ -22,7 +22,7 @@ ls -la
 
 # 3. Count files by type (get a sense of scale)
 find . -type f -name "*.py" | wc -l
-find . -type f -name "*.js" -o -name "*.ts" -o -name "*.tsx" | wc -l
+find . -type f \( -name "*.js" -o -name "*.ts" -o -name "*.tsx" \) | wc -l
 find . -type f -name "*.java" | wc -l
 find . -type f -name "*.go" | wc -l
 

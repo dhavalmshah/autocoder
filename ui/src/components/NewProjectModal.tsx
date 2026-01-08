@@ -130,10 +130,14 @@ export function NewProjectModal({
 
   const handleImportFolderSelect = (path: string) => {
     setImportPath(path)
-    // Extract folder name as default project name
-    const folderName = path.split('/').pop() || ''
+    // Extract folder name as default project name (handle both / and \ for cross-platform)
+    const folderName = path.split(/[/\\]/).pop() || ''
     // Sanitize folder name for project name
-    const sanitized = folderName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase()
+    const sanitized = folderName
+      .replace(/[^a-zA-Z0-9_-]/g, '-')
+      .replace(/-+/g, '-')  // Collapse multiple hyphens
+      .replace(/^-+|-+$/g, '')  // Trim leading/trailing hyphens
+      .toLowerCase()
     setProjectName(sanitized || 'imported-project')
     setStep('import-name')
   }

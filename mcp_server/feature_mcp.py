@@ -27,6 +27,7 @@ Context Tools (for imported/analyzed projects):
 
 import json
 import os
+import re
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -34,6 +35,22 @@ from pathlib import Path
 from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
+
+
+def _validate_context_name(name: str) -> str | None:
+    """Validate context file name to prevent path traversal.
+
+    Returns None if valid, error message if invalid.
+    """
+    if not name:
+        return "Context file name cannot be empty"
+    if not re.match(r'^[a-zA-Z0-9_-]+$', name):
+        return "Invalid context file name. Use only alphanumeric characters, underscores, and hyphens."
+    if '..' in name or '/' in name or '\\' in name:
+        return "Invalid context file name. Path traversal not allowed."
+    return None
+
+
 from pydantic import BaseModel, Field
 from sqlalchemy.sql.expression import func
 
@@ -483,6 +500,11 @@ def context_read(
         The content of the context file, or error if not found.
     """
     try:
+        # Validate name to prevent path traversal
+        validation_error = _validate_context_name(name)
+        if validation_error:
+            return json.dumps({"error": validation_error})
+
         content = load_context_file(PROJECT_DIR, name)
         if content is None:
             return json.dumps({"error": f"Context file '{name}' not found"})
@@ -543,9 +565,18 @@ def context_write(
         JSON with: success (bool), path (str), message (str)
     """
     try:
+        # Validate name to prevent path traversal
+        validation_error = _validate_context_name(name)
+        if validation_error:
+            return json.dumps({"error": validation_error})
+
         # Ensure context directory exists
         context_dir = ensure_context_dir(PROJECT_DIR)
         file_path = context_dir / f"{name}.md"
+
+        # Additional safety: verify resolved path is within context_dir
+        if not file_path.resolve().is_relative_to(context_dir.resolve()):
+            return json.dumps({"error": "Invalid file path"})
 
         # Write the content
         file_path.write_text(content, encoding="utf-8")
@@ -608,7 +639,6 @@ def context_update_index(
         # Update status entries in the markdown table
         for area, status in status_updates.items():
             # Look for table rows like "| Architecture | Pending | architecture.md |"
-            import re
             pattern = rf"\|\s*{re.escape(area)}\s*\|\s*\w+\s*\|"
             replacement = f"| {area} | {status} |"
             new_content, count = re.subn(pattern, replacement, content, flags=re.IGNORECASE)

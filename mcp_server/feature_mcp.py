@@ -568,7 +568,7 @@ def context_write(
         # Validate name to prevent path traversal
         validation_error = _validate_context_name(name)
         if validation_error:
-            return json.dumps({"error": validation_error})
+            return json.dumps({"success": False, "error": validation_error})
 
         # Ensure context directory exists
         context_dir = ensure_context_dir(PROJECT_DIR)
@@ -576,7 +576,7 @@ def context_write(
 
         # Additional safety: verify resolved path is within context_dir
         if not file_path.resolve().is_relative_to(context_dir.resolve()):
-            return json.dumps({"error": "Invalid file path"})
+            return json.dumps({"success": False, "error": "Invalid file path"})
 
         # Write the content
         file_path.write_text(content, encoding="utf-8")
@@ -587,7 +587,7 @@ def context_write(
             "message": f"Context file '{name}.md' written successfully"
         }, indent=2)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"success": False, "error": str(e)})
 
 
 @mcp.tool()
@@ -632,6 +632,7 @@ def context_update_index(
         for area, status in status_updates.items():
             if status not in valid_statuses:
                 return json.dumps({
+                    "success": False,
                     "error": f"Invalid status '{status}' for area '{area}'. Must be one of: {', '.join(sorted(valid_statuses))}"
                 })
 
@@ -640,6 +641,7 @@ def context_update_index(
 
         if not index_path.exists():
             return json.dumps({
+                "success": False,
                 "error": "Index file does not exist. Create it first using context_write."
             })
 
@@ -669,13 +671,21 @@ def context_update_index(
         # Write back
         index_path.write_text(content, encoding="utf-8")
 
+        # Warn if no updates occurred
+        if len(updated_areas) == 0:
+            return json.dumps({
+                "success": False,
+                "updated_areas": [],
+                "error": "No areas were updated. Check that area names match the index table exactly."
+            }, indent=2)
+
         return json.dumps({
             "success": True,
             "updated_areas": updated_areas,
             "message": f"Updated {len(updated_areas)} area(s) in index"
         }, indent=2)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"success": False, "error": str(e)})
 
 
 if __name__ == "__main__":

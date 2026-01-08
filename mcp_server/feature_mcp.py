@@ -480,7 +480,7 @@ def context_list() -> str:
             "total_files": len(result)
         }, indent=2)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"success": False, "error": str(e)})
 
 
 @mcp.tool()
@@ -605,7 +605,7 @@ def context_get_progress() -> str:
         progress = get_analysis_progress(PROJECT_DIR)
         return json.dumps(progress, indent=2)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"success": False, "error": str(e)})
 
 
 @mcp.tool()

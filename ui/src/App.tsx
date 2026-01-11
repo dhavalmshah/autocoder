@@ -142,6 +142,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
+  }
   }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, assistantOpen, features, showSettings, isSpecCreating, chatToFeaturesOpen])
 
   // Combine WebSocket progress with feature data

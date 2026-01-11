@@ -22,6 +22,10 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 # Ensure common install locations are on PATH
 ENV PATH="/root/.local/bin:/usr/local/bin:${PATH}"
 
+# Make `claude` available even if a login shell resets PATH
+RUN ln -sf /root/.local/bin/claude /usr/local/bin/claude \
+    && command -v claude
+
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 

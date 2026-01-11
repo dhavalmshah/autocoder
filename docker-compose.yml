@@ -14,6 +14,8 @@ services:
       - claude-config:/root/.claude
 
   claude-login:
+    profiles:
+      - login
     image: autocoder:local
     entrypoint: ["bash", "-lc", "claude login"]
     stdin_open: true

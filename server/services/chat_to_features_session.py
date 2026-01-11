@@ -422,7 +422,7 @@ Now, let's help the user define their features!"""
         security_settings = {
             "sandbox": {"enabled": False},
             "permissions": {
-                "defaultMode": "bypassPermissions",
+                "defaultMode": "acceptEdits",  # Avoid root-only skip-permissions flag
                 "allow": [
                     "Read(./**)",
                     "Glob(./**)",
@@ -444,7 +444,7 @@ Now, let's help the user define their features!"""
                     cli_path=system_cli,
                     system_prompt=system_prompt,
                     allowed_tools=READONLY_TOOLS,
-                    permission_mode="bypassPermissions",
+                    permission_mode="default",
                     max_turns=100,
                     cwd=str(self.project_dir.resolve()),
                     settings=str(settings_file.resolve()),

@@ -218,7 +218,7 @@ class AssistantChatSession:
         security_settings = {
             "sandbox": {"enabled": False},  # No bash, so sandbox not needed
             "permissions": {
-                "defaultMode": "bypassPermissions",  # Read-only, no dangerous ops
+                "defaultMode": "acceptEdits",  # Avoid root-only skip-permissions flag
                 "allow": permissions_list,
             },
         }
@@ -254,7 +254,7 @@ class AssistantChatSession:
                     system_prompt=system_prompt,
                     allowed_tools=[*READONLY_BUILTIN_TOOLS, *ASSISTANT_FEATURE_TOOLS],
                     mcp_servers=mcp_servers,
-                    permission_mode="bypassPermissions",
+                    permission_mode="default",
                     max_turns=100,
                     cwd=str(self.project_dir.resolve()),
                     settings=str(settings_file.resolve()),

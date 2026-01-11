@@ -1,0 +1,8 @@
+.git
+**/__pycache__
+**/*.pyc
+venv
+ui/node_modules
+ui/dist
+.generations
+.DS_Store

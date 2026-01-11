@@ -17,6 +17,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def allow_non_localhost() -> bool:
+    """Whether to allow non-localhost requests (useful when running in Docker)."""
+    return os.getenv("AUTOCODER_ALLOW_NON_LOCALHOST", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    )
+
+
 def get_cli_command() -> str:
     """
     Get the CLI command to use for the agent.
@@ -98,6 +109,9 @@ app.add_middleware(
 @app.middleware("http")
 async def require_localhost(request: Request, call_next):
     """Only allow requests from localhost."""
+    if allow_non_localhost():
+        return await call_next(request)
+
     client_host = request.client.host if request.client else None
 
     # Allow localhost connections

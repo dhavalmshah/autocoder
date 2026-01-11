@@ -1,0 +1,29 @@
+services:
+  autocoder:
+    build: .
+    image: autocoder:local
+    ports:
+      - "8888:8888"
+    environment:
+      - CLI_COMMAND=claude
+      - PLAYWRIGHT_HEADLESS=false
+      - AUTOCODER_ALLOW_NON_LOCALHOST=true
+    volumes:
+      - generations:/app/generations
+      - autocoder-config:/root/.autocoder
+      - claude-config:/root/.claude
+
+  claude-login:
+    image: autocoder:local
+    entrypoint: ["bash", "-lc", "claude login"]
+    stdin_open: true
+    tty: true
+    environment:
+      - CLI_COMMAND=claude
+    volumes:
+      - claude-config:/root/.claude
+
+volumes:
+  generations:
+  autocoder-config:
+  claude-config:

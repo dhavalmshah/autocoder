@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from ..validators import validate_project_name
 from ..schemas import (
     FeatureBulkCreate,
     FeatureBulkCreateResponse,

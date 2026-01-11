@@ -19,7 +19,8 @@ import { AssistantFAB } from './components/AssistantFAB'
 import { AssistantPanel } from './components/AssistantPanel'
 import { ExpandProjectModal } from './components/ExpandProjectModal'
 import { SettingsModal } from './components/SettingsModal'
-import { Loader2, Settings } from 'lucide-react'
+import { ChatToFeaturesPanel } from './components/ChatToFeaturesPanel'
+import { Plus, Loader2, Sparkles, Settings } from 'lucide-react'
 import type { Feature } from './lib/types'
 
 function App() {
@@ -40,6 +41,7 @@ function App() {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [isSpecCreating, setIsSpecCreating] = useState(false)
+  const [chatToFeaturesOpen, setChatToFeaturesOpen] = useState(false)
 
   const queryClient = useQueryClient()
   const { data: projects, isLoading: projectsLoading } = useProjects()
@@ -112,6 +114,11 @@ function App() {
         e.preventDefault()
         setShowSettings(true)
       }
+      // F : Toggle chat-to-features sidebar (when project selected)
+      if ((e.key === 'f' || e.key === 'F') && selectedProject) {
+        e.preventDefault()
+        setChatToFeaturesOpen(prev => !prev)
+      }
 
       // Escape : Close modals
       if (e.key === 'Escape') {
@@ -119,6 +126,8 @@ function App() {
           setShowExpandProject(false)
         } else if (showSettings) {
           setShowSettings(false)
+        if (chatToFeaturesOpen) {
+          setChatToFeaturesOpen(false)
         } else if (assistantOpen) {
           setAssistantOpen(false)
         } else if (showAddFeature) {
@@ -133,7 +142,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, assistantOpen, features, showSettings, isSpecCreating])
+  }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, assistantOpen, features, showSettings, isSpecCreating, chatToFeaturesOpen])
 
   // Combine WebSocket progress with feature data
   const progress = wsState.progress.total > 0 ? wsState.progress : {
@@ -173,6 +182,30 @@ function App() {
 
               {selectedProject && (
                 <>
+                  <button
+                    onClick={() => setShowAddFeature(true)}
+                    className="neo-btn neo-btn-primary text-sm"
+                    title="Press N"
+                  >
+                    <Plus size={18} />
+                    Add Feature
+                    <kbd className="ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
+                      N
+                    </kbd>
+                  </button>
+
+                  <button
+                    onClick={() => setChatToFeaturesOpen(!chatToFeaturesOpen)}
+                    className={`neo-btn text-sm ${chatToFeaturesOpen ? 'neo-btn-active' : ''}`}
+                    title="Suggest Features (F)"
+                  >
+                    <Sparkles size={18} />
+                    Suggest
+                    <kbd className="ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
+                      F
+                    </kbd>
+                  </button>
+
                   <AgentControl
                     projectName={selectedProject}
                     status={wsState.agentStatus}
@@ -310,6 +343,14 @@ function App() {
       {/* Settings Modal */}
       {showSettings && (
         <SettingsModal onClose={() => setShowSettings(false)} />
+      )}
+      {/* Chat-to-Features Sidebar */}
+      {selectedProject && (
+        <ChatToFeaturesPanel
+          projectName={selectedProject}
+          isOpen={chatToFeaturesOpen}
+          onClose={() => setChatToFeaturesOpen(false)}
+        />
       )}
     </div>
   )

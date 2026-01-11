@@ -101,6 +101,7 @@ Desktop.ini
 ui/dist/
 ui/.vite/
 .vite/
+*.tsbuildinfo
 
 # ===================
 # Environment files

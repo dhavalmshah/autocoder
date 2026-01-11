@@ -35,6 +35,7 @@ from .routers import (
     agent_router,
     assistant_chat_router,
     expand_project_router,
+    chat_to_features_router,
     features_router,
     filesystem_router,
     projects_router,
@@ -45,6 +46,8 @@ from .schemas import SetupStatus
 from .services.assistant_chat_session import cleanup_all_sessions as cleanup_assistant_sessions
 from .services.expand_chat_session import cleanup_all_expand_sessions
 from .services.process_manager import cleanup_all_managers, cleanup_orphaned_locks
+from .services.chat_to_features_session import cleanup_all_sessions as cleanup_chat_to_features_sessions
+from .services.process_manager import cleanup_all_managers
 from .websocket import project_websocket
 
 # Paths
@@ -62,6 +65,7 @@ async def lifespan(app: FastAPI):
     await cleanup_all_managers()
     await cleanup_assistant_sessions()
     await cleanup_all_expand_sessions()
+    await cleanup_chat_to_features_sessions()
 
 
 # Create FastAPI app
@@ -115,6 +119,7 @@ app.include_router(expand_project_router)
 app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
 app.include_router(settings_router)
+app.include_router(chat_to_features_router)
 
 
 # ============================================================================

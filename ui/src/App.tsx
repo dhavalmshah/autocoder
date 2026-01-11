@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useProjects, useFeatures, useAgentStatus } from './hooks/useProjects'
+import { useProjects, useFeatures, useAgentStatus, useGithubSshStatus } from './hooks/useProjects'
 import { useProjectWebSocket } from './hooks/useWebSocket'
 import { useFeatureSound } from './hooks/useFeatureSound'
 import { useCelebration } from './hooks/useCelebration'
@@ -20,6 +20,7 @@ import { AssistantPanel } from './components/AssistantPanel'
 import { ExpandProjectModal } from './components/ExpandProjectModal'
 import { SettingsModal } from './components/SettingsModal'
 import { ChatToFeaturesPanel } from './components/ChatToFeaturesPanel'
+import { CloneRepoModal } from './components/CloneRepoModal'
 import { Plus, Loader2, Sparkles, Settings } from 'lucide-react'
 import type { Feature } from './lib/types'
 
@@ -42,10 +43,12 @@ function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [isSpecCreating, setIsSpecCreating] = useState(false)
   const [chatToFeaturesOpen, setChatToFeaturesOpen] = useState(false)
+  const [showCloneRepo, setShowCloneRepo] = useState(false)
 
   const queryClient = useQueryClient()
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: features } = useFeatures(selectedProject)
+  const { data: githubSshStatus } = useGithubSshStatus()
   useAgentStatus(selectedProject) // Keep polling for status updates
   const wsState = useProjectWebSocket(selectedProject)
 
@@ -240,6 +243,21 @@ function App() {
             <p className="text-[var(--color-neo-text-secondary)] mb-4">
               Select a project from the dropdown above or create a new one to get started.
             </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                onClick={() => setShowCloneRepo(true)}
+                className="neo-btn neo-btn-primary"
+              >
+                Import from GitHub
+                <Sparkles size={16} />
+              </button>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="neo-btn"
+              >
+                {githubSshStatus?.configured ? 'GitHub SSH: Configured' : 'Set GitHub SSH Key'}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="space-y-8">
@@ -344,6 +362,19 @@ function App() {
       {/* Settings Modal */}
       {showSettings && (
         <SettingsModal onClose={() => setShowSettings(false)} />
+      )}
+
+      {/* Clone Repo Modal */}
+      {showCloneRepo && (
+        <CloneRepoModal
+          isOpen={showCloneRepo}
+          onClose={() => setShowCloneRepo(false)}
+          onProjectCloned={(projectName) => handleSelectProject(projectName)}
+          onOpenSettings={() => {
+            setShowCloneRepo(false)
+            setShowSettings(true)
+          }}
+        />
       )}
       {/* Chat-to-Features Sidebar */}
       {selectedProject && (

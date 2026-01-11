@@ -11,6 +11,7 @@ RUN apt-get update \
         ca-certificates \
         bash \
         git \
+        openssh-client \
         nodejs \
         npm \
     && rm -rf /var/lib/apt/lists/*

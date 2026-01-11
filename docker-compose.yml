@@ -8,10 +8,12 @@ services:
       - CLI_COMMAND=claude
       - PLAYWRIGHT_HEADLESS=false
       - AUTOCODER_ALLOW_NON_LOCALHOST=true
+      - AUTOCODER_FILESYSTEM_ROOT=/app/generations
     volumes:
       - generations:/app/generations
       - autocoder-config:/root/.autocoder
       - claude-config:/root/.claude
+      - ssh-config:/root/.ssh
 
   claude-login:
     profiles:
@@ -24,8 +26,10 @@ services:
       - CLI_COMMAND=claude
     volumes:
       - claude-config:/root/.claude
+      - ssh-config:/root/.ssh
 
 volumes:
   generations:
   autocoder-config:
   claude-config:
+  ssh-config:

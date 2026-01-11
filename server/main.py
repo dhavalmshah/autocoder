@@ -49,6 +49,7 @@ from .routers import (
     chat_to_features_router,
     features_router,
     filesystem_router,
+    github_ssh_router,
     projects_router,
     settings_router,
     spec_creation_router,
@@ -131,6 +132,7 @@ app.include_router(agent_router)
 app.include_router(spec_creation_router)
 app.include_router(expand_project_router)
 app.include_router(filesystem_router)
+app.include_router(github_ssh_router)
 app.include_router(assistant_chat_router)
 app.include_router(settings_router)
 app.include_router(chat_to_features_router)

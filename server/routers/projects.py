@@ -6,10 +6,14 @@ API endpoints for project management.
 Uses project registry for path lookups instead of fixed generations/ directory.
 """
 
+import os
+import re
 import shutil
+import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from ..validators import validate_project_name
 from ..schemas import (
@@ -116,6 +120,42 @@ def _has_source_code(project_path: Path, max_depth: int = 3) -> bool:
 
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+
+class ProjectCloneRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$')
+    repo_url: str = Field(..., min_length=1)
+
+
+def _normalize_github_repo_url(repo_url: str) -> str:
+    """Normalize a GitHub repo URL to an SSH clone URL."""
+    url = repo_url.strip()
+
+    # Already SSH
+    if url.startswith("git@github.com:"):
+        m = re.match(r"^git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$", url)
+        if not m:
+            raise ValueError("Invalid GitHub SSH URL")
+        owner, repo = m.group(1), m.group(2)
+        return f"git@github.com:{owner}/{repo}.git"
+
+    # HTTPS
+    m = re.match(r"^https?://(www\.)?github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", url)
+    if m:
+        owner, repo = m.group(2), m.group(3)
+        return f"git@github.com:{owner}/{repo}.git"
+
+    raise ValueError("Only GitHub HTTPS or SSH URLs are supported")
+
+
+def _get_clone_root() -> Path:
+    value = os.getenv("AUTOCODER_FILESYSTEM_ROOT") or os.getenv("AUTOCODER_GENERATIONS_DIR")
+    if value:
+        try:
+            return Path(value).resolve()
+        except (OSError, ValueError):
+            pass
+    return (Path(__file__).parent.parent.parent / "generations").resolve()
 
 
 def get_project_stats(project_dir: Path) -> ProjectStats:
@@ -308,6 +348,76 @@ async def import_project(project: ProjectImport):
     return ProjectSummary(
         name=name,
         path=project_path.as_posix(),
+        has_spec=has_spec,
+        stats=stats,
+    )
+
+
+@router.post("/clone", response_model=ProjectSummary)
+async def clone_project(payload: ProjectCloneRequest):
+    """Clone a GitHub repository over SSH into the configured generations directory and register it."""
+    _init_imports()
+    register_project, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(payload.name)
+    try:
+        repo_url = _normalize_github_repo_url(payload.repo_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    existing = get_project_path(name)
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Project '{name}' already exists at {existing}")
+
+    dest_root = _get_clone_root()
+    dest_root.mkdir(parents=True, exist_ok=True)
+    dest_path = (dest_root / name).resolve()
+
+    from .filesystem import is_path_blocked
+    if is_path_blocked(dest_path):
+        raise HTTPException(status_code=403, detail="Cannot clone into system or sensitive directory")
+
+    try:
+        dest_path.relative_to(dest_root)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Clone destination is not allowed")
+
+    if dest_path.exists():
+        raise HTTPException(status_code=409, detail=f"Destination already exists: {dest_path}")
+
+    env = os.environ.copy()
+    ssh_dir = Path.home() / ".ssh"
+    ssh_key = ssh_dir / "id_rsa"
+    known_hosts = ssh_dir / "known_hosts"
+    if ssh_key.exists():
+        env["GIT_SSH_COMMAND"] = (
+            "ssh -i \"{}\" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=\"{}\""
+        ).format(ssh_key.as_posix(), known_hosts.as_posix())
+
+    proc = subprocess.run(
+        ["git", "clone", repo_url, dest_path.as_posix()],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if proc.returncode != 0:
+        output = (proc.stdout or "") + (proc.stderr or "")
+        raise HTTPException(status_code=400, detail=f"git clone failed: {output.strip()}")
+
+    _migrate_project_prompts(dest_path)
+    _set_analyzer_mode(dest_path, enabled=True)
+    _ensure_database_exists(dest_path)
+
+    try:
+        register_project(name, dest_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to register project: {e}")
+
+    has_spec = _check_spec_exists(dest_path)
+    stats = get_project_stats(dest_path)
+    return ProjectSummary(
+        name=name,
+        path=dest_path.as_posix(),
         has_spec=has_spec,
         stats=stats,
     )

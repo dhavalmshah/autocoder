@@ -11,6 +11,7 @@ from .expand_project import router as expand_project_router
 from .chat_to_features import router as chat_to_features_router
 from .features import router as features_router
 from .filesystem import router as filesystem_router
+from .github_ssh import router as github_ssh_router
 from .projects import router as projects_router
 from .settings import router as settings_router
 from .spec_creation import router as spec_creation_router
@@ -22,6 +23,7 @@ __all__ = [
     "spec_creation_router",
     "expand_project_router",
     "filesystem_router",
+    "github_ssh_router",
     "assistant_chat_router",
     "settings_router",
     "chat_to_features_router",

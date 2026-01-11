@@ -1,6 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X, Loader2, AlertCircle } from 'lucide-react'
-import { useSettings, useUpdateSettings, useAvailableModels } from '../hooks/useProjects'
+import {
+  useSettings,
+  useUpdateSettings,
+  useAvailableModels,
+  useGithubSshStatus,
+  useSetGithubSshKey,
+  useUploadGithubSshKeyFile,
+  useTestGithubSsh,
+} from '../hooks/useProjects'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -10,6 +18,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const { data: settings, isLoading, isError, refetch } = useSettings()
   const { data: modelsData } = useAvailableModels()
   const updateSettings = useUpdateSettings()
+  const { data: githubSshStatus, isLoading: githubSshLoading, refetch: refetchGithubSshStatus } = useGithubSshStatus()
+  const setGithubSshKey = useSetGithubSshKey()
+  const uploadGithubSshKeyFile = useUploadGithubSshKeyFile()
+  const testGithubSsh = useTestGithubSsh()
+  const [githubPrivateKey, setGithubPrivateKey] = useState('')
+  const [githubKeyFile, setGithubKeyFile] = useState<File | null>(null)
+  const [githubMessage, setGithubMessage] = useState<string | null>(null)
+  const [githubTestOutput, setGithubTestOutput] = useState<string | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -72,6 +88,45 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   const models = modelsData?.models ?? []
   const isSaving = updateSettings.isPending
+
+  const handleSaveGithubKey = async () => {
+    setGithubMessage(null)
+    setGithubTestOutput(null)
+    try {
+      await setGithubSshKey.mutateAsync(githubPrivateKey)
+      setGithubMessage('Saved GitHub SSH key')
+      setGithubPrivateKey('')
+      await refetchGithubSshStatus()
+    } catch (e) {
+      setGithubMessage(e instanceof Error ? e.message : 'Failed to save key')
+    }
+  }
+
+  const handleUploadGithubKey = async () => {
+    if (!githubKeyFile) return
+    setGithubMessage(null)
+    setGithubTestOutput(null)
+    try {
+      await uploadGithubSshKeyFile.mutateAsync(githubKeyFile)
+      setGithubMessage('Uploaded GitHub SSH key')
+      setGithubKeyFile(null)
+      await refetchGithubSshStatus()
+    } catch (e) {
+      setGithubMessage(e instanceof Error ? e.message : 'Failed to upload key')
+    }
+  }
+
+  const handleTestGithubSsh = async () => {
+    setGithubMessage(null)
+    setGithubTestOutput(null)
+    try {
+      const result = await testGithubSsh.mutateAsync()
+      setGithubTestOutput(result.output)
+      setGithubMessage(result.success ? 'GitHub SSH test succeeded' : 'GitHub SSH test failed')
+    } catch (e) {
+      setGithubMessage(e instanceof Error ? e.message : 'GitHub SSH test failed')
+    }
+  }
 
   return (
     <div
@@ -205,6 +260,89 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 Failed to save settings. Please try again.
               </div>
             )}
+
+            <div>
+              <div className="font-display font-bold text-base">GitHub SSH</div>
+              <p className="text-sm text-[var(--color-neo-text-secondary)] mt-1">
+                Configure a single SSH key for cloning/pushing to GitHub
+              </p>
+
+              <div className="mt-3 p-3 bg-white border-3 border-[var(--color-neo-border)] text-sm">
+                {githubSshLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="animate-spin" size={16} />
+                    <span>Checking status...</span>
+                  </div>
+                ) : githubSshStatus?.configured ? (
+                  <div>
+                    <div className="font-bold">Configured</div>
+                    {githubSshStatus.fingerprint && (
+                      <div className="text-[var(--color-neo-text-secondary)]">
+                        Fingerprint: <span className="font-mono">{githubSshStatus.fingerprint}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="font-bold">Not configured</div>
+                )}
+              </div>
+
+              <div className="mt-4">
+                <label className="font-display font-bold text-sm block mb-2">Paste private key</label>
+                <textarea
+                  value={githubPrivateKey}
+                  onChange={(e) => setGithubPrivateKey(e.target.value)}
+                  className="w-full h-24 p-3 border-3 border-[var(--color-neo-border)] bg-white font-mono text-xs"
+                  placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                />
+                <button
+                  onClick={handleSaveGithubKey}
+                  disabled={!githubPrivateKey.trim() || setGithubSshKey.isPending}
+                  className="neo-btn neo-btn-primary w-full mt-2"
+                >
+                  {setGithubSshKey.isPending ? 'Saving...' : 'Save key'}
+                </button>
+              </div>
+
+              <div className="mt-4">
+                <label className="font-display font-bold text-sm block mb-2">Or upload key file</label>
+                <input
+                  type="file"
+                  accept=".pem,.key,*/*"
+                  onChange={(e) => setGithubKeyFile(e.target.files?.[0] ?? null)}
+                  className="w-full"
+                />
+                <button
+                  onClick={handleUploadGithubKey}
+                  disabled={!githubKeyFile || uploadGithubSshKeyFile.isPending}
+                  className="neo-btn neo-btn-primary w-full mt-2"
+                >
+                  {uploadGithubSshKeyFile.isPending ? 'Uploading...' : 'Upload key file'}
+                </button>
+              </div>
+
+              <div className="mt-4">
+                <button
+                  onClick={handleTestGithubSsh}
+                  disabled={testGithubSsh.isPending}
+                  className="neo-btn neo-btn-success w-full"
+                >
+                  {testGithubSsh.isPending ? 'Testing...' : 'Test GitHub SSH'}
+                </button>
+              </div>
+
+              {githubMessage && (
+                <div className="mt-3 p-3 border-3 border-[var(--color-neo-border)] bg-[var(--color-neo-bg)] text-sm">
+                  {githubMessage}
+                </div>
+              )}
+
+              {githubTestOutput && (
+                <pre className="mt-3 p-3 border-3 border-[var(--color-neo-border)] bg-white text-xs whitespace-pre-wrap break-words">
+                  {githubTestOutput}
+                </pre>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -8,6 +8,7 @@ Provides start/stop/pause/resume functionality with cross-platform support.
 
 import asyncio
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -281,11 +282,21 @@ class AgentProcessManager:
         try:
             # Start subprocess with piped stdout/stderr
             # Use project_dir as cwd so Claude SDK sandbox allows access to project files
+            ssh_dir = Path.home() / ".ssh"
+            ssh_key = ssh_dir / "id_rsa"
+            known_hosts = ssh_dir / "known_hosts"
+            env = os.environ.copy()
+            if ssh_key.exists():
+                env["GIT_SSH_COMMAND"] = (
+                    "ssh -i \"{}\" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=\"{}\""
+                ).format(ssh_key.as_posix(), known_hosts.as_posix())
+
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 cwd=str(self.project_dir),
+                env=env,
             )
 
             self._create_lock()

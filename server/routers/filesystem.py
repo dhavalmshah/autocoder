@@ -28,6 +28,29 @@ from ..schemas import (
 router = APIRouter(prefix="/api/filesystem", tags=["filesystem"])
 
 
+def get_safe_root() -> Path | None:
+    """Optional safe root directory for filesystem browsing (used in Docker)."""
+    value = os.getenv("AUTOCODER_FILESYSTEM_ROOT")
+    if not value:
+        return None
+    try:
+        return Path(value).resolve()
+    except (OSError, ValueError):
+        return None
+
+
+def is_within_safe_root(path: Path) -> bool:
+    """Return True if path is within the configured safe root (or if none is set)."""
+    safe_root = get_safe_root()
+    if safe_root is None:
+        return True
+    try:
+        path.resolve().relative_to(safe_root)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 # =============================================================================
 # Platform-Specific Blocked Paths
 # =============================================================================
@@ -195,9 +218,11 @@ async def list_directory(
     Returns directories only (for folder selection).
     On Windows, includes available drives.
     """
-    # Default to home directory
+    safe_root = get_safe_root()
+
+    # Default to safe root (if configured), otherwise home directory
     if path is None or path == "":
-        target = Path.home()
+        target = safe_root if safe_root is not None else Path.home()
     else:
         # Security: Block UNC paths
         if is_unc_path(path):
@@ -213,6 +238,11 @@ async def list_directory(
         target = target.resolve()
     except (OSError, ValueError) as e:
         raise HTTPException(status_code=400, detail=f"Invalid path: {e}")
+
+    # If a safe root is configured, do not allow traversal outside it
+    if safe_root is not None and not is_within_safe_root(target):
+        logger.warning("Blocked access outside safe root: %s", target)
+        raise HTTPException(status_code=403, detail="Access to this directory is not allowed")
 
     # Security: Check if path is blocked
     if is_path_blocked(target):
@@ -284,7 +314,7 @@ async def list_directory(
     if target != target.parent:  # Not at root
         parent = target.parent
         # Don't expose parent if it's blocked
-        if not is_path_blocked(parent):
+        if not is_path_blocked(parent) and is_within_safe_root(parent):
             parent_path = parent.as_posix()
 
     # Get drives on Windows

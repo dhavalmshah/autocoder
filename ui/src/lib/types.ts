@@ -107,6 +107,17 @@ export interface SetupStatus {
   npm: boolean
 }
 
+// GitHub SSH types
+export interface GithubSshStatus {
+  configured: boolean
+  fingerprint: string | null
+}
+
+export interface GithubSshTestResponse {
+  success: boolean
+  output: string
+}
+
 // WebSocket message types
 export type WSMessageType = 'progress' | 'feature_update' | 'log' | 'agent_status' | 'pong'
 

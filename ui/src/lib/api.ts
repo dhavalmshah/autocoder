@@ -21,6 +21,8 @@ import type {
   Settings,
   SettingsUpdate,
   ModelsResponse,
+  GithubSshStatus,
+  GithubSshTestResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -65,6 +67,13 @@ export async function importProject(name: string, path: string): Promise<Project
   return fetchJSON('/projects/import', {
     method: 'POST',
     body: JSON.stringify({ name, path }),
+  })
+}
+
+export async function cloneProject(name: string, repoUrl: string): Promise<ProjectSummary> {
+  return fetchJSON('/projects/clone', {
+    method: 'POST',
+    body: JSON.stringify({ name, repo_url: repoUrl }),
   })
 }
 
@@ -307,4 +316,40 @@ export async function updateSettings(settings: SettingsUpdate): Promise<Settings
     method: 'PATCH',
     body: JSON.stringify(settings),
   })
+}
+
+// ============================================================================
+// GitHub SSH API
+// ============================================================================
+
+export async function getGithubSshStatus(): Promise<GithubSshStatus> {
+  return fetchJSON('/github-ssh/status')
+}
+
+export async function setGithubSshKey(privateKey: string): Promise<GithubSshStatus> {
+  return fetchJSON('/github-ssh/key', {
+    method: 'POST',
+    body: JSON.stringify({ private_key: privateKey }),
+  })
+}
+
+export async function uploadGithubSshKeyFile(file: File): Promise<GithubSshStatus> {
+  const form = new FormData()
+  form.append('file', file)
+
+  const response = await fetch(`${API_BASE}/github-ssh/key-file`, {
+    method: 'POST',
+    body: form,
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+
+  return response.json()
+}
+
+export async function testGithubSsh(): Promise<GithubSshTestResponse> {
+  return fetchJSON('/github-ssh/test', { method: 'POST' })
 }

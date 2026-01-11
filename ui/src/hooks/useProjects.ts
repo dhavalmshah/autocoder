@@ -4,7 +4,14 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as api from '../lib/api'
-import type { FeatureCreate, ModelsResponse, Settings, SettingsUpdate } from '../lib/types'
+import type {
+  FeatureCreate,
+  GithubSshStatus,
+  GithubSshTestResponse,
+  ModelsResponse,
+  Settings,
+  SettingsUpdate,
+} from '../lib/types'
 
 // ============================================================================
 // Projects
@@ -14,6 +21,58 @@ export function useProjects() {
   return useQuery({
     queryKey: ['projects'],
     queryFn: api.listProjects,
+  })
+}
+
+export function useCloneProject() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ name, repoUrl }: { name: string; repoUrl: string }) => api.cloneProject(name, repoUrl),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+}
+
+// ============================================================================
+// GitHub SSH
+// ============================================================================
+
+export function useGithubSshStatus() {
+  return useQuery<GithubSshStatus>({
+    queryKey: ['github-ssh', 'status'],
+    queryFn: api.getGithubSshStatus,
+    staleTime: 10000,
+    retry: 1,
+  })
+}
+
+export function useSetGithubSshKey() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (privateKey: string) => api.setGithubSshKey(privateKey),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['github-ssh', 'status'] })
+    },
+  })
+}
+
+export function useUploadGithubSshKeyFile() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (file: File) => api.uploadGithubSshKeyFile(file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['github-ssh', 'status'] })
+    },
+  })
+}
+
+export function useTestGithubSsh() {
+  return useMutation<GithubSshTestResponse, Error>({
+    mutationFn: () => api.testGithubSsh(),
   })
 }
 
@@ -199,7 +258,7 @@ export function useCreateDirectory() {
 
   return useMutation({
     mutationFn: (path: string) => api.createDirectory(path),
-    onSuccess: (_, path) => {
+    onSuccess: (_data: { success: boolean; path: string }, path: string) => {
       // Invalidate parent directory listing
       const parentPath = path.split('/').slice(0, -1).join('/') || undefined
       queryClient.invalidateQueries({ queryKey: ['filesystem', 'list', parentPath] })
@@ -254,9 +313,11 @@ export function useSettings() {
 export function useUpdateSettings() {
   const queryClient = useQueryClient()
 
+  type UpdateContext = { previous?: Settings }
+
   return useMutation({
     mutationFn: (settings: SettingsUpdate) => api.updateSettings(settings),
-    onMutate: async (newSettings) => {
+    onMutate: async (newSettings: SettingsUpdate): Promise<UpdateContext> => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['settings'] })
 
@@ -264,7 +325,7 @@ export function useUpdateSettings() {
       const previous = queryClient.getQueryData<Settings>(['settings'])
 
       // Optimistically update
-      queryClient.setQueryData<Settings>(['settings'], (old) => ({
+      queryClient.setQueryData<Settings>(['settings'], (old: Settings | undefined) => ({
         ...DEFAULT_SETTINGS,
         ...old,
         ...newSettings,
@@ -272,7 +333,7 @@ export function useUpdateSettings() {
 
       return { previous }
     },
-    onError: (_err, _newSettings, context) => {
+    onError: (_err: Error, _newSettings: SettingsUpdate, context: UpdateContext | undefined) => {
       // Rollback on error
       if (context?.previous) {
         queryClient.setQueryData(['settings'], context.previous)
